@@ -7,10 +7,12 @@ import awscala.dynamodbv2.{DynamoDB, Table, cond}
 import com.amazonaws.services.lambda.runtime.Context
 import org.hatdex.serverless.aws.LambdaProxyHandler
 import org.hatdex.serverless.aws.AnyContent
-import play.api.libs.json.Json
+import org.hatdex.serverless.aws.proxy.{ProxyRequest, ProxyResponse}
+import play.api.libs.json._
 import todos.DataJsonProtocol._
 
-import scala.util.Try
+import scala.reflect.ClassTag
+import scala.util.{Success, Try}
 
 
 object DataJsonProtocol {
@@ -27,19 +29,19 @@ object DataJsonProtocol {
 
 class GetAllHandler extends LambdaProxyHandler[AnyContent, List[String]] {
   implicit protected val dynamoDB = Handler.dynamoDB
-  override protected def handleProxied(context: Context): Try[List[String]] = {
-    val logger = context.getLogger
-    logger.log("Handling Ping")
-    Try {
+  override protected def handle[T: ClassTag](r: ProxyRequest[AnyContent])(implicit context: Context): Try[ProxyResponse[List[String]]] = {
+    logger.debug("Handling GetAll")
+    val result = Try {
       val results = Handler.table.scan(Seq("item" -> cond.isNotNull)).toList
       results.flatMap(res => res.attributes.filter(_.name == "item").map(attr => attr.value.s.get))
     }
+    Success(ProxyResponse(result))
   }
 }
 
 class CreateHandler extends LambdaProxyHandler[CreateRequest, String] {
   implicit protected val dynamoDB = Handler.dynamoDB
-  override protected def handleProxied(input: CreateRequest, context: Context): Try[String] = {
+  override protected def handle(input: CreateRequest, r: ProxyRequest[CreateRequest])(implicit context: Context): Try[String] = {
     Try {
       val id = UUID.randomUUID().toString
       Handler.table.put(id, "item" -> input.body)
@@ -49,9 +51,8 @@ class CreateHandler extends LambdaProxyHandler[CreateRequest, String] {
 }
 
 class PingPongHandler extends LambdaProxyHandler[Ping, Pong] {
-  override protected def handleProxied(ping: Ping, context: Context): Try[Pong] = {
-    val logger = context.getLogger
-    logger.log("Handling Ping")
+  override protected def handle(ping: Ping, r: ProxyRequest[Ping])(implicit context: Context): Try[Pong] = {
+    logger.debug("Handling Ping")
     Try(Pong(ping.inputMsg.reverse))
   }
 }
