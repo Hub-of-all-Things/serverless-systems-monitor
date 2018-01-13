@@ -22,21 +22,21 @@ package:
 
 functions:
   ping:
-    handler: todos.PingPongHandler::handle
+    handler: todos.handler.PingPongHandler::handle
     events:
       - http:
           path: ping
           method: post
           cors: true
   readAll:
-    handler: todos.GetAllHandler::handle
+    handler: todos.handler.GetAllHandler::handle
     events:
       - http:
           path: todos
           method: get
           cors: true
   create:
-      handler: todos.CreateHandler::handle
+      handler: todos.handler.CreateHandler::handle
       events:
         - http:
             path: todos

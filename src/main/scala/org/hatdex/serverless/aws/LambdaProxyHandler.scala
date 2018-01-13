@@ -1,39 +1,59 @@
 package org.hatdex.serverless.aws
 
+import java.io.{InputStream, OutputStream}
+
 import com.amazonaws.services.lambda.runtime.Context
 import org.hatdex.serverless.aws.proxy._
 import play.api.libs.json.{Reads, Writes}
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
 
-import scala.reflect.ClassTag
-import scala.util.{Failure, Try}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success, Try}
 
-abstract class LambdaProxyHandler[In, Out]()(implicit inputReads: Reads[In], outputWrites: Writes[Out])
-  extends LambdaHandler[ProxyRequest[In], ProxyResponse[Out]]()(
-    JsonProtocol.RequestJsonReads[In](inputReads),
-    JsonProtocol.ResponseJsonWrites[Out](outputWrites)) {
 
-  override val logger: Logger = LoggerFactory.getLogger(this.getClass)
+abstract class LambdaProxyHandler[I, O]()(implicit val iReads: Reads[I], val oWrites: Writes[O])
+  extends LambdaStreamHandler[ProxyRequest[I], ProxyResponse[O]] {
 
-  protected def handle()(implicit c: Context): Try[Out] = {
-    logger.error("Request with no data")
-    Failure(BadRequestError("Empty Request Body"))
+  implicit protected val inputReads: Reads[ProxyRequest[I]] = JsonProtocol.RequestJsonReads[I](iReads)
+  implicit protected val outputWrites: Writes[ProxyResponse[O]] = JsonProtocol.ResponseJsonWrites[O](oWrites)
+
+  final def handle(input: InputStream, output: OutputStream, context: Context): Unit =
+    handle(handleAsync _)(input, output, context)
+
+  protected val executionContext: ExecutionContext = ExecutionContext.global
+  final protected def handleAsync(i: ProxyRequest[I], c: Context): Future[ProxyResponse[O]] = {
+    val result = i.body.map(handle(_, c))
+      .getOrElse(handle(c))
+
+    Future.successful(ProxyResponse(result))
   }
 
-  protected def handle(i: In)(implicit c: Context): Try[Out] = {
-    logger.error("Not Handling proxy request data")
-    Failure(InternalServerError("Not Handling proxy request data"))
+  protected def handle(i: I, c: Context): Try[O] = handle(c)
+
+  protected def handle(c: Context): Try[O] = Failure(BadRequestError("Empty Request Body"))
+}
+
+abstract class LambdaProxyHandlerAsync[I, O]()(implicit val iReads: Reads[I], val oWrites: Writes[O])
+  extends LambdaStreamHandler[ProxyRequest[I], ProxyResponse[O]] {
+
+  protected implicit val inputReads: Reads[ProxyRequest[I]] = JsonProtocol.RequestJsonReads[I](iReads)
+  protected implicit val outputWrites: Writes[ProxyResponse[O]] = JsonProtocol.ResponseJsonWrites[O](oWrites)
+
+  final def handle(input: InputStream, output: OutputStream, context: Context): Unit =
+    handle(handleAsync _)(input, output, context)
+
+  protected implicit val executionContext: ExecutionContext = ExecutionContext.global
+  final protected def handleAsync(i: ProxyRequest[I], c: Context): Future[ProxyResponse[O]] = {
+    val result = i.body.map(handle(_, c))
+      .getOrElse(handle(c))
+
+    result.map(r => ProxyResponse(Success(r)))
+      .recover {
+        case e: ErrorResponse => ProxyResponse(Failure(e))
+        case e => ProxyResponse(Failure(InternalServerError("Unexpected error", e)))
+      }
   }
 
-  protected def handle(i: In, r: ProxyRequest[In])(implicit c: Context): Try[Out] = {
-    handle(i)
-  }
+  protected def handle(i: I, c: Context): Future[O] = handle(c)
 
-  override protected def handle[T : ClassTag](r: ProxyRequest[In])(implicit c: Context): Try[ProxyResponse[Out]] = {
-    logger.info("Handle proxied request")
-    val result = r.body.map(handle(_, r)(c))
-      .getOrElse(handle()(c))
-    Try(ProxyResponse(result))
-  }
+  protected def handle(c: Context): Future[O] = Future.failed(BadRequestError("Empty Request Body"))
 }

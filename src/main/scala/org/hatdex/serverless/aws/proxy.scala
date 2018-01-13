@@ -51,7 +51,7 @@ package object proxy {
 
   trait JsonProtocol {
 
-    protected val errorResponseWrites: Writes[ErrorResponse] = (error: ErrorResponse) => {
+    val errorResponseWrites: Writes[ErrorResponse] = (error: ErrorResponse) => {
       val stackTrace = Option(error.getCause)
         .map(c => c.getStackTrace.toSeq.map(s => s.toString))
 

@@ -15,7 +15,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-json" % "2.6.8",
   "org.specs2" %% "specs2-core" % "4.0.0" % "provided",
   "org.specs2" %% "specs2-matcher-extra" % "4.0.0" % "provided",
-  "org.specs2" %% "specs2-mock" % "4.0.0" % "provided"
+  "org.specs2" %% "specs2-mock" % "4.0.0" % "provided",
+  "com.typesafe.akka" %% "akka-actor" % "2.5.8"
 )
 
 scalacOptions ++= Seq(

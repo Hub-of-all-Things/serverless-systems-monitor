@@ -4,21 +4,16 @@ import java.io.ByteArrayOutputStream
 
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.util.StringInputStream
-import org.hatdex.serverless.aws.proxy.{ProxyRequest, ProxyResponse}
-import org.hatdex.serverless.aws.{AnyContent, LambdaProxyHandler}
+import org.hatdex.serverless.aws.{AnyContent, LambdaProxyHandler, LambdaProxyHandlerAsync}
 import org.slf4j.{Logger, LoggerFactory}
 import org.specs2.mock.Mockito
 import org.specs2.mutable.Specification
 import org.specs2.specification.Scope
 import play.api.libs.json.{Format, Json}
 
+import scala.concurrent.Future
 import scala.io.Source
-import scala.reflect.ClassTag
-import scala.util.{Success, Try}
-
-class LambdaProxyHandlerTest {
-
-}
+import scala.util.Try
 
 trait ProxyLambdaSpecContext extends Scope with Mockito {
   object DataJsonProtocol {
@@ -28,25 +23,34 @@ trait ProxyLambdaSpecContext extends Scope with Mockito {
     implicit val pongFormat: Format[Pong] = Json.format[Pong]
   }
 
-  import todos.DataJsonProtocol._
+  import DataJsonProtocol._
 
   class EmptyPingHandler extends LambdaProxyHandler[AnyContent, Pong] {
-    override protected def handle[T : ClassTag](r: ProxyRequest[AnyContent])(implicit c: Context): Try[ProxyResponse[Pong]] = {
+    override protected def handle(c: Context): Try[Pong] = {
       logger.info("Handling contentless Ping")
-      val result = Try(Pong("pong"))
-      Success(ProxyResponse(result))
+      Try(Pong("pong"))
+    }
+  }
+
+  class EmptyAsyncHandler extends LambdaProxyHandlerAsync[AnyContent, Pong] {
+    override protected def handle(c: Context): Future[Pong] = {
+      logger.info("Handling async Ping")
+      Future {
+        Thread.sleep(1000)
+        Pong("pong")
+      }
     }
   }
 
   class PingPongHandler extends LambdaProxyHandler[Ping, Pong] {
-    override protected def handle(ping: Ping, request: ProxyRequest[Ping])(implicit context: Context): Try[Pong] = {
+    override protected def handle(ping: Ping, context: Context): Try[Pong] = {
       logger.info("Handling Ping")
       Try(Pong(ping.inputMsg.reverse))
     }
   }
 
   class PingPongContextlessHandler extends LambdaProxyHandler[Ping, Pong] {
-    override protected def handle(ping: Ping)(implicit context: Context): Try[Pong] = {
+    override protected def handle(ping: Ping, context: Context): Try[Pong] = {
       logger.info("Handling Ping")
       Try(Pong(ping.inputMsg.reverse))
     }
@@ -55,6 +59,7 @@ trait ProxyLambdaSpecContext extends Scope with Mockito {
   val contextMock: Context = mock[Context]
   contextMock.getFunctionName returns "testFunctionName"
   contextMock.getAwsRequestId returns "requestid"
+  contextMock.getRemainingTimeInMillis returns 10000
 
 }
 
@@ -62,7 +67,7 @@ trait ProxyLambdaSpecContext extends Scope with Mockito {
 class ProxyLambdaSpec extends Specification with ProxyLambdaSpecContext with Mockito {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
 
-  "Lambda Proxy Handler" should {
+  "Lambda Proxy Handler with no content" should {
     "handle request and response classes with no body" in {
       val s = Source.fromResource("proxyInput-empty.json").mkString
 
@@ -79,6 +84,24 @@ class ProxyLambdaSpec extends Specification with ProxyLambdaSpecContext with Moc
       result must endWith("}")
     }
 
+    "handle request with asynchrony" in {
+      val s = Source.fromResource("proxyInput-empty.json").mkString
+
+      val is = new StringInputStream(s)
+      val os = new ByteArrayOutputStream()
+
+      new EmptyAsyncHandler().handle(is, os, contextMock)
+      logger.info("Request handled")
+      val result = os.toString
+      logger.info(s"Result: $result")
+
+      result must startWith("{")
+      result must contain(""""body":"{\"outputMsg\":\"pong\"}"""")
+      result must endWith("}")
+    }
+  }
+
+  "Lambda Proxy Handler" should {
     "handle request and response classes with body of case classes and proxy request info" in {
       val s = Source.fromResource("proxyInput-case-class.json").mkString
 
