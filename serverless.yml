@@ -21,76 +21,113 @@ provider:
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
       Resource: "arn:aws:dynamodb:eu-west-1:*:*"
+    - Effect: Allow
+      Action:
+        - SNS:Publish
+      Resource:
+        Fn::Join:
+          - ":"
+          - - "arn:aws:sns"
+            - Ref: "AWS::Region"
+            - Ref: "AWS::AccountId"
+            - "NewmanCollectionSNSTopic2"
 
 package:
-  # individually: true
-  artifact: artifacts/todos.jar
+  individually: true
+  # artifact: artifacts/status-monitor.jar
 
 functions:
-  newmanCollectionRunner:
+  collectionTrigger:
     handler: handler.postmanCollectionRunner
-    runtime: nodejs6.10
-    timeout: 60
+    timeout: 30
     environment:
       POSTMAN_API_KEY: ***REMOVED***
-      POSTMAN_COLLECTION: 110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5
-      POSTMAN_ENVIRONMENT: 110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b
+      SNS_TOPIC:
+        Ref: "NewmanCollectionSNSTopic2"
+    runtime: nodejs6.10
     package:
       individually: true
       artifact: artifacts/newman.zip
     events:
       - http:
-          path: newman/postman/run
+          path: newman/run
           method: get
           cors: true
+          request:
+            parameters:
+              querystrings:
+                collection: true
+                environment: true
+                
 
-  postmanStatus:
-    handler: todos.postman.GetStatusHandler::handle
+  collectionSchedule:
+    handler: handler.postmanCollectionRunner
+    timeout: 300
     environment:
       POSTMAN_API_KEY: ***REMOVED***
+      SNS_TOPIC:
+        Ref: "NewmanCollectionSNSTopic2"
+    package:
+      individually: true
+      artifact: artifacts/newman.zip
     events:
-      - http:
-          path: postman/status
-          method: get
-          cors: true
-  
-  travisStatus:
-    handler: todos.travis.GetStatusHandler::handle
-    environment:
-      TRAVIS_API_KEY: 8Ior5kc9vSLT7APMbhlJEw
-    events:
-      - http:
-          path: travis/status
-          method: get
-          cors: true
-  ping:
-    handler: todos.handler.PingPongHandler::handle
-    events:
-      - http:
-          path: ping
-          method: post
-          cors: true
+      - schedule:
+          rate: cron(0 12 * * ? *)
+          enabled: false
+          input:
+            collection: 110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5
+            environment: 110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b
 
-  readAll:
-    handler: todos.handler.GetAllHandler::handle
-    events:
-      - http:
-          path: todos
-          method: get
-          cors: true
-  create:
-    handler: todos.handler.CreateHandler::handle
-    events:
-      - http:
-          path: todos
-          method: post
-          cors: true
+    # postmanStatus:
+    #   handler: todos.postman.GetStatusHandler::handle
+    #   environment:
+    #     POSTMAN_API_KEY: ***REMOVED***
+    #   events:
+    #     - http:
+    #         path: postman/status
+    #         method: get
+    #         cors: true
+    
+    # travisStatus:
+    #   handler: todos.travis.GetStatusHandler::handle
+    #   environment:
+    #     TRAVIS_API_KEY: 8Ior5kc9vSLT7APMbhlJEw
+    #   events:
+    #     - http:
+    #         path: travis/status
+    #         method: get
+    #         cors: true
+    # ping:
+    #   handler: todos.handler.PingPongHandler::handle
+    #   events:
+    #     - http:
+    #         path: ping
+    #         method: post
+    #         cors: true
+
+    # readAll:
+    #   handler: todos.handler.GetAllHandler::handle
+    #   events:
+    #     - http:
+    #         path: todos
+    #         method: get
+    #         cors: true
+    # create:
+    #   handler: todos.handler.CreateHandler::handle
+    #   events:
+    #     - http:
+    #         path: todos
+    #         method: post
+    #         cors: true
 
 resources:
   Resources:
+    NewmanCollectionSNSTopic2:
+      Type: AWS::SNS::Topic
+      Properties: 
+        TopicName: NewmanCollectionSNSTopic2
     TodosDynamoDbTable:
       Type: 'AWS::DynamoDB::Table'
-      DeletionPolicy: Retain
       Properties:
         AttributeDefinitions:
           -
@@ -103,5 +140,5 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: 'todos'
+        TableName: 'todos2'
 

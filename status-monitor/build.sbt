@@ -5,7 +5,7 @@ name := "status-monitor"
 
 resolvers += Resolver.sonatypeRepo("public")
 scalaVersion := "2.12.4"
-assemblyJarName in assembly := "todos.jar"
+assemblyJarName in assembly := "status-monitor.jar"
 
 libraryDependencies ++= Seq(
   "org.hatdex" %% "aws-lambda-scala-handler" % "0.0.1",
