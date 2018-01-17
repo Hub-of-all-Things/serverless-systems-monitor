@@ -78,15 +78,15 @@ functions:
             collection: 110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5
             environment: 110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b
 
-    # postmanStatus:
-    #   handler: todos.postman.GetStatusHandler::handle
-    #   environment:
-    #     POSTMAN_API_KEY: ***REMOVED***
-    #   events:
-    #     - http:
-    #         path: postman/status
-    #         method: get
-    #         cors: true
+  postmanStatus:
+    handler: todos.postman.GetStatusHandler::handle
+    environment:
+      POSTMAN_API_KEY: ***REMOVED***
+    events:
+      - http:
+          path: postman/status
+          method: get
+          cors: true
     
     # travisStatus:
     #   handler: todos.travis.GetStatusHandler::handle
