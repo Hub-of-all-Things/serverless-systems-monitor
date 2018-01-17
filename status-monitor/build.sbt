@@ -3,7 +3,10 @@ import sbt._
 
 name := "status-monitor"
 
-resolvers += Resolver.sonatypeRepo("public")
+resolvers += Resolver.sonatypeRepo(
+  "public",
+  "HAT Library Artifacts Releases" at "https://s3-eu-west-1.amazonaws.com/library-artifacts-releases.hubofallthings.com")
+
 scalaVersion := "2.12.4"
 assemblyJarName in assembly := "status-monitor.jar"
 
