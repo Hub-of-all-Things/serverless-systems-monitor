@@ -21,3 +21,11 @@ project/plugins/project/
 
 # Serverless
 .serverless/
+
+# Artifacts
+artifacts/
+temp/
+
+# Configuration
+env.sh
+

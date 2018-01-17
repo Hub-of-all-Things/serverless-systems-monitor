@@ -1,0 +1,62 @@
+service: serverless-system-status-pooler
+
+provider:
+  name: aws
+  runtime: nodejs6.10
+  region: eu-west-1
+  stage: dev
+  memorySize: 512
+  versionFunctions: false
+  timeout: 60
+  logRetentionInDays: 2
+  endpointType: regional
+  environment:
+    POSTMAN_API_KEY: ***REMOVED***
+    SNS_TOPIC:
+      Ref: "NewmanCollectionSNSTopic"
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - SNS:Publish
+      Resource:
+        Fn::Join:
+          - ""
+          - - "arn:aws:sns:"
+            - Ref: "AWS::Region"
+            - ":"
+            - Ref: "AWS::AccountId"
+            - ":NewmanCollectionSNSTopic"
+
+functions:
+  collectionTrigger:
+    handler: handler.postmanCollectionRunner
+    timeout: 30
+    events:
+      - http:
+          path: newman/run
+          method: get
+          cors: true
+          request:
+            parameters:
+              querystrings:
+                collection: true
+                environment: true
+              
+
+  collectionSchedule:
+    handler: handler.postmanCollectionRunner
+    timeout: 300
+    events:
+      - schedule:
+          rate: cron(0 12 * * ? *)
+          enabled: false
+          input:
+            collection: 110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5
+            environment: 110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b
+
+resources:
+  Resources:
+    NewmanCollectionSNSTopic:
+      Type: AWS::SNS::Topic
+      Properties: 
+        TopicName: NewmanCollectionSNSTopic

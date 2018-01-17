@@ -1,0 +1,23 @@
+{
+  "name": "lambda-newman-runner",
+  "version": "1.0.0",
+  "description": "Newman Postman collection runner wrapper",
+  "main": "handler.js",
+  "author": "Andrius Aucinas",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/npm/npm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/npm/npm/issues"
+  },
+  "homepage": "https://github.com/npm/npm#readme",
+  "dependencies": {
+    "newman": "^3.9.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}

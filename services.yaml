@@ -1,0 +1,63 @@
+
+Exchange:
+  Name: Exchange
+  Description: The exchange set of services
+  Services:
+  - DEX:
+      Type: Backend
+      Name: DEX
+      Description: DEX
+      Public: False
+      Code:
+        Repository: https://github.com/Hub-of-all-Things/dex
+      Health:
+        Version:
+        Status: 
+
+Hubofallthings:
+  Name: hubofallthings.net
+  Description: The hubofallthings.net HAT cluster
+  Services:
+    HAT:
+      Type: Backend
+      Name: HAT
+      Description: The HAT
+      Public: True
+      Code:
+        Repository: https://github.com/Hub-of-all-Things/HAT2.0
+        BuildStatus:
+          Type: TravisCI
+          Repo: Hub-of-all-Things/HAT2.0
+      Health:
+        Version:
+        Status: 
+      DependsOn:
+        - Exchange.DEX
+        - Hubofallthings.Milliner
+
+    Milliner:
+      Type: Backend
+      Name: HAT
+      Description: The HAT
+      Public: False
+      Code:
+        Repository: https://github.com/Hub-of-all-Things/HAT2.0
+        BuildStatus: https://travis-ci.org/Hub-of-all-Things/HAT2.0.svg?branch=master
+      Health:
+        Version:
+        Status:
+      DependsOn:
+        - Exchange.DEX
+
+    Rumpel:
+      Type: Frontend
+      Name: Rumpel Web
+      Description: Rumpel Personal Data Browser
+      Public: True
+      Code:
+        Repository: https://github.com/Hub-of-all-Things/HAT2.0
+        BuildStatus: https://travis-ci.org/Hub-of-all-Things/HAT2.0.svg?branch=master
+      Health:
+        Version:
+      DependsOn:
+        - Hubofallthings.HAT
