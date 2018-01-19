@@ -87,6 +87,24 @@ functions:
           path: postman/status
           method: get
           cors: true
+
+  postmanNotificationToSlack:
+    handler: org.hatdex.postman.ProcessNewmanNotification::handle
+    environment:
+      SNS_TOPIC:
+        Ref: "SlackNotificationsTopic"
+    events:
+      - sns:
+        Ref: "NewmanCollectionSNSTopic2"
+
+  slackNotification:
+    handler: org.hatdex.slack.PostMessageHandler::handle
+    environment:
+      SLACK_API_KEY: ***REMOVED***
+      SLACK_CHANNEL: ***REMOVED***
+    events:
+      - sns:
+        Ref: "SlackNotificationsTopic"
     
     # travisStatus:
     #   handler: todos.travis.GetStatusHandler::handle
@@ -126,6 +144,10 @@ resources:
       Type: AWS::SNS::Topic
       Properties: 
         TopicName: NewmanCollectionSNSTopic2
+    SlackNotificationsTopic:
+      Type: AWS::SNS::Topic
+      Properties: 
+        TopicName: SlackNotificationsTopic
     TodosDynamoDbTable:
       Type: 'AWS::DynamoDB::Table'
       Properties:
