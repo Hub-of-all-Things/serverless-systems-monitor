@@ -11,7 +11,7 @@ provider:
   logRetentionInDays: 2
   endpointType: regional
   environment:
-    POSTMAN_API_KEY: ***REMOVED***
+    POSTMAN_API_KEY: 0893e83ec3bf42819e2d2815bee8ecdd
     SNS_TOPIC:
       Ref: "NewmanCollectionSNSTopic"
   iamRoleStatements:

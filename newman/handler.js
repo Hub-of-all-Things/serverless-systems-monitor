@@ -5,7 +5,7 @@ AWS.config.region = process.env['AWS_DEFAULT_REGION'];
 
 function test() {
     var collectionId = '110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5';
-    var apiKey = '***REMOVED***';
+    var apiKey = '0893e83ec3bf42819e2d2815bee8ecdd';
     var environmentId = '110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b';
 
     postmanRun(collectionId, apiKey, environmentId, function(err, summary) {

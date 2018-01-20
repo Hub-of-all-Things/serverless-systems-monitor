@@ -41,7 +41,7 @@ functions:
     handler: handler.postmanCollectionRunner
     timeout: 30
     environment:
-      POSTMAN_API_KEY: ***REMOVED***
+      POSTMAN_API_KEY: ${env:POSTMAN_API_KEY}
       SNS_TOPIC:
         Ref: "NewmanCollectionSNSTopic2"
     runtime: nodejs6.10
@@ -64,7 +64,7 @@ functions:
     handler: handler.postmanCollectionRunner
     timeout: 300
     environment:
-      POSTMAN_API_KEY: ***REMOVED***
+      POSTMAN_API_KEY: ${env:POSTMAN_API_KEY}
       SNS_TOPIC:
         Ref: "NewmanCollectionSNSTopic2"
     package:
@@ -78,16 +78,6 @@ functions:
             collection: 110376-cd628c63-58cb-51d8-b983-4ac1e44e94c5
             environment: 110376-6c3fa672-673a-6cfa-59b5-4a3f2705119b
 
-  postmanStatus:
-    handler: todos.postman.GetStatusHandler::handle
-    environment:
-      POSTMAN_API_KEY: ***REMOVED***
-    events:
-      - http:
-          path: postman/status
-          method: get
-          cors: true
-
   postmanNotificationToSlack:
     handler: org.hatdex.postman.ProcessNewmanNotification::handle
     environment:
@@ -100,43 +90,11 @@ functions:
   slackNotification:
     handler: org.hatdex.slack.PostMessageHandler::handle
     environment:
-      SLACK_API_KEY: ***REMOVED***
-      SLACK_CHANNEL: ***REMOVED***
+      SLACK_API_KEY: ${env:SLACK_API_KEY}
+      SLACK_CHANNEL: ${env:SLACK_CHANNEL}
     events:
       - sns:
         Ref: "SlackNotificationsTopic"
-    
-    # travisStatus:
-    #   handler: todos.travis.GetStatusHandler::handle
-    #   environment:
-    #     TRAVIS_API_KEY: 8Ior5kc9vSLT7APMbhlJEw
-    #   events:
-    #     - http:
-    #         path: travis/status
-    #         method: get
-    #         cors: true
-    # ping:
-    #   handler: todos.handler.PingPongHandler::handle
-    #   events:
-    #     - http:
-    #         path: ping
-    #         method: post
-    #         cors: true
-
-    # readAll:
-    #   handler: todos.handler.GetAllHandler::handle
-    #   events:
-    #     - http:
-    #         path: todos
-    #         method: get
-    #         cors: true
-    # create:
-    #   handler: todos.handler.CreateHandler::handle
-    #   events:
-    #     - http:
-    #         path: todos
-    #         method: post
-    #         cors: true
 
 resources:
   Resources:
