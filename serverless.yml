@@ -34,7 +34,7 @@ provider:
 
 package:
   individually: true
-  # artifact: artifacts/status-monitor.jar
+  artifact: artifacts/status-monitor.jar
 
 functions:
   collectionTrigger:
