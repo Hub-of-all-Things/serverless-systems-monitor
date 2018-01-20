@@ -126,7 +126,7 @@ object SlackModels {
 
 }
 
-class ProcessNewmanNotification extends LambdaHandler[PostmanCollectionModels.PostmanCollectionRunResult, Message] with JsonBodyReadables {
+class ProcessNewmanNotification extends LambdaHandler[JsValue, Message] with JsonBodyReadables {
   override implicit val executionContext: ExecutionContext = Client.executionContext
 
   import SlackModels._
@@ -156,8 +156,9 @@ class ProcessNewmanNotification extends LambdaHandler[PostmanCollectionModels.Po
      },
    */
 
-  override protected def handle(runResult: PostmanCollectionModels.PostmanCollectionRunResult, context: Context): Try[Message] = {
-    logger.info(s"Handling request ${context.getAwsRequestId}")
+  override protected def handle(result: JsValue, context: Context): Try[Message] = {
+    logger.info(s"Handling request ${context.getAwsRequestId} with content ${result}")
+    val runResult = result.as[PostmanCollectionModels.PostmanCollectionRunResult]
     val stats = runResult.run.stats
     val message = Message(
       s"""
