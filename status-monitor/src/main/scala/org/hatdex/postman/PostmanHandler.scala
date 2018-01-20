@@ -9,14 +9,15 @@ import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.services.sns.AmazonSNSClientBuilder
 import com.amazonaws.services.sns.model.MessageAttributeValue
 import org.hatdex.postman.SlackModels.Message
-import org.hatdex.serverless.aws.{AnyContent, LambdaHandler, LambdaProxyHandlerAsync}
+import org.hatdex.serverless.aws.{AnyContent, Event, LambdaHandler, LambdaProxyHandlerAsync, SNSEvent}
 import org.slf4j.{Logger, LoggerFactory}
 import play.api.libs.json.{Format, JsValue, Json}
 import play.api.libs.ws.JsonBodyReadables
 import play.api.libs.ws.ahc.StandaloneAhcWSClient
+import org.hatdex.serverless
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 /*
  Slack travis notification template:
@@ -126,7 +127,7 @@ object SlackModels {
 
 }
 
-class ProcessNewmanNotification extends LambdaHandler[JsValue, Message] with JsonBodyReadables {
+class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] with JsonBodyReadables with serverless.aws.JsonProtocol {
   override implicit val executionContext: ExecutionContext = Client.executionContext
 
   import SlackModels._
@@ -156,11 +157,29 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Message] with Jso
      },
    */
 
-  override protected def handle(result: JsValue, context: Context): Try[Message] = {
+  override protected def handle(result: JsValue, context: Context): Try[Seq[Message]] = {
     logger.info(s"Handling request ${context.getAwsRequestId} with content ${result}")
-    val runResult = result.as[PostmanCollectionModels.PostmanCollectionRunResult]
+    val event = result.as[Event[PostmanCollectionModels.PostmanCollectionRunResult]]
+
+    val snsClient = new SNSClient(Client.awsRegion, "")
+
+    val published = event.records flatMap { record =>
+      record.Sns map { sns =>
+        val notification = buildSlackNotification(sns.Message)
+        publishMessage(snsClient, notification)
+      }
+    }
+
+    published.foldLeft(Try(Seq[Message]()))({
+      case (Success(s), Success(m)) => Success(s :+ m)
+      case (Success(s), Failure(e)) => Failure(e)
+      case (Failure(e), _) => Failure(e)
+    })
+  }
+
+  def buildSlackNotification(runResult: PostmanCollectionModels.PostmanCollectionRunResult): Message = {
     val stats = runResult.run.stats
-    val message = Message(
+    Message(
       s"""
          | Collection <https://documenter.getpostman.com/collection/view/${runResult.collection.info.id}|${runResult.collection.info.name}>
          | with ${stats.requests.total} requests and ${stats.tests.total} tests ran successfully""".stripMargin,
@@ -176,12 +195,12 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Message] with Jso
         "[no preview available]"
       ))
     )
+  }
 
-    val snsClient = new SNSClient(Client.awsRegion, "")
-
+  def publishMessage(snsClient: SNSClient, message: Message): Try[Message] = {
     Try(snsClient.publishSns(Json.toJson(message).toString))
-        .map(messageId => logger.info(s"Published ${Json.toJson(message).toString} with message id $messageId"))
-        .map(_ => message)
+      .map(messageId => logger.info(s"Published ${Json.toJson(message).toString} with message id $messageId"))
+      .map(_ => message)
   }
 }
 
