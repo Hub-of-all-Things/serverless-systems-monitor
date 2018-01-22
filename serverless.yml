@@ -1,5 +1,27 @@
 service: system-status-pooler
 
+custom:
+  postmanTopicName: PostmanStatus
+  slackTopicName: SlackMessages
+  slackTopicArn:
+    Fn::Join:
+      - ""
+      - - "arn:aws:sns:"
+        - Ref: "AWS::Region"
+        - ":"
+        - Ref: "AWS::AccountId"
+        - ":SlackMessages"
+  postmanTopicArn:
+    Fn::Join:
+      - ""
+      - - "arn:aws:sns:"
+        - Ref: "AWS::Region"
+        - ":"
+        - Ref: "AWS::AccountId"
+        - ":PostmanStatus"
+  awsAccountId:
+    Ref: AWS::AccountId
+
 provider:
   name: aws
   runtime: java8
@@ -25,8 +47,8 @@ provider:
       Action:
         - SNS:Publish
       Resource:
-        - Ref: "NewmanCollectionSNSTopic2"
-        - Ref: "SlackNotificationsTopic"
+        - Ref: "PostmanSNSTopic"
+        - Ref: "SlackSNSTopic"
 
 package:
   individually: true
@@ -38,8 +60,7 @@ functions:
     timeout: 30
     environment:
       POSTMAN_API_KEY: ${env:POSTMAN_API_KEY}
-      SNS_TOPIC:
-        Ref: "NewmanCollectionSNSTopic2"
+      SNS_TOPIC: ${self:custom.postmanTopicArn}
     runtime: nodejs6.10
     package:
       individually: true
@@ -61,8 +82,7 @@ functions:
     timeout: 300
     environment:
       POSTMAN_API_KEY: ${env:POSTMAN_API_KEY}
-      SNS_TOPIC:
-        Ref: "NewmanCollectionSNSTopic2"
+      SNS_TOPIC: ${self:custom.postmanTopicArn}
     package:
       individually: true
       artifact: artifacts/newman.zip
@@ -77,11 +97,18 @@ functions:
   postmanNotificationToSlack:
     handler: org.hatdex.postman.ProcessNewmanNotification::handle
     environment:
-      SNS_TOPIC:
-        Ref: "SlackNotificationsTopic"
+      SNS_TOPIC: ${self:custom.slackTopicArn}
     events:
       - sns:
-        Ref: "NewmanCollectionSNSTopic2"
+          arn:
+            Fn::Join:
+              - ""
+              - - "arn:aws:sns:"
+                - Ref: "AWS::Region"
+                - ":"
+                - Ref: "AWS::AccountId"
+                - ":PostmanStatus"
+          topicName: PostmanStatus
 
   slackNotification:
     handler: org.hatdex.slack.PostMessageHandler::handle
@@ -90,31 +117,43 @@ functions:
       SLACK_CHANNEL: ${env:SLACK_CHANNEL}
     events:
       - sns:
-        Ref: "SlackNotificationsTopic"
+          arn:
+            Fn::Join:
+              - ""
+              - - "arn:aws:sns:"
+                - Ref: "AWS::Region"
+                - ":"
+                - Ref: "AWS::AccountId"
+                - ":SlackMessages"
+          topicName: SlackMessages
 
 resources:
   Resources:
-    NewmanCollectionSNSTopic2:
+    PostmanSNSTopic:
       Type: AWS::SNS::Topic
       Properties: 
-        TopicName: NewmanCollectionSNSTopic2
-    SlackNotificationsTopic:
+        TopicName: ${self:custom.postmanTopicName}
+    SlackSNSTopic:
       Type: AWS::SNS::Topic
       Properties: 
-        TopicName: SlackNotificationsTopic
-    TodosDynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
-      Properties:
-        AttributeDefinitions:
-          -
-            AttributeName: id
-            AttributeType: S
-        KeySchema:
-          -
-            AttributeName: id
-            KeyType: HASH
-        ProvisionedThroughput:
-          ReadCapacityUnits: 1
-          WriteCapacityUnits: 1
-        TableName: 'todos2'
+        TopicName: ${self:custom.slackTopicName}
+    # SlackNotificationsTopic:
+    #   Type: AWS::SNS::Topic
+    #   Properties: 
+    #     TopicName: ${self:custom.slackTopicName}
+    # TodosDynamoDbTable:
+    #   Type: 'AWS::DynamoDB::Table'
+    #   Properties:
+    #     AttributeDefinitions:
+    #       -
+    #         AttributeName: id
+    #         AttributeType: S
+    #     KeySchema:
+    #       -
+    #         AttributeName: id
+    #         KeyType: HASH
+    #     ProvisionedThroughput:
+    #       ReadCapacityUnits: 1
+    #       WriteCapacityUnits: 1
+    #     TableName: 'todos2'
 
