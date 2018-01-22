@@ -1,22 +1,20 @@
 package org.hatdex.postman
 
-import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.amazonaws.services.lambda.runtime.Context
-import com.amazonaws.services.sns.AmazonSNSClientBuilder
-import com.amazonaws.services.sns.model.MessageAttributeValue
-import org.hatdex.postman.SlackModels.Message
-import org.hatdex.serverless.aws.{AnyContent, Event, LambdaHandler, LambdaProxyHandlerAsync, SNSEvent}
+import org.hatdex.postman.PostmanCollectionModels.postmanCollectionRunResult
+import org.hatdex.serverless.aws.EventJsonProtocol.eventReads
+import org.hatdex.serverless.aws.{Event, LambdaHandler, SNSClient}
+import org.hatdex.slack.SlackModels.{Message, messageJsonFormat}
 import org.slf4j.{Logger, LoggerFactory}
-import play.api.libs.json.{Format, JsValue, Json}
+import play.api.libs.json.Json
 import play.api.libs.ws.JsonBodyReadables
 import play.api.libs.ws.ahc.StandaloneAhcWSClient
-import org.hatdex.serverless
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 /*
@@ -41,96 +39,13 @@ import scala.util.{Failure, Success, Try}
 
  */
 
-object PostmanCollectionModels {
-
-  case class CollectionInfo(
-    id: String,
-    name: String,
-    schema: String)
-
-  case class CollectionItem(
-    id: String,
-    name: String,
-    request: JsValue,
-    response: Seq[JsValue])
-
-  case class PostmanCollection(
-    item: Seq[CollectionItem],
-    info: CollectionInfo)
-
-  case class Stat (
-    total: Int,
-    pending: Int,
-    failed: Int)
-
-  case class RunStats (
-    iterations: Stat,
-    items: Stat,
-    scripts: Stat,
-    prerequests: Stat,
-    requests: Stat,
-    tests: Stat,
-    assertions: Stat,
-    testScripts: Stat,
-    prerequestScripts: Stat)
-
-  case class RunTimings(
-    responseAverage: Int,
-    started: ZonedDateTime,
-    completed: ZonedDateTime)
-
-  case class RunTransfers(
-    responseTotal: Long)
-
-  case class PostmanCollectionRun(
-    stats: RunStats,
-    timings: RunTimings,
-    transfers: RunTransfers,
-    failures: Seq[JsValue],
-    error: Option[JsValue])
-
-  case class PostmanCollectionRunResult(
-    collection: PostmanCollection,
-    run: PostmanCollectionRun)
-
-  implicit val collectionInfoJsonFormat: Format[CollectionInfo] = Json.format[CollectionInfo]
-  implicit val collectionItemJsonFormat: Format[CollectionItem] = Json.format[CollectionItem]
-  implicit val postmanCollectionJsonFormat: Format[PostmanCollection] = Json.format[PostmanCollection]
-  implicit val statJsonFormat: Format[Stat] = Json.format[Stat]
-  implicit val runStatsJsonFormat: Format[RunStats] = Json.format[RunStats]
-  implicit val runTimingsJsonFormat: Format[RunTimings] = Json.format[RunTimings]
-  implicit val runTransferJsonFormat: Format[RunTransfers] = Json.format[RunTransfers]
-  implicit val postmanCollectionRunFormat: Format[PostmanCollectionRun] = Json.format[PostmanCollectionRun]
-  implicit val postmanCollectionRunResult: Format[PostmanCollectionRunResult] = Json.format[PostmanCollectionRunResult]
-
-}
-
-object SlackModels {
-
-  case class AttachmentField(
-    title: Option[String],
-    value: Option[String],
-    short: Boolean)
-
-  case class MessageAttachment(
-    color: String,
-    fields: Seq[AttachmentField],
-    fallback: String)
-
-  case class Message(
-    text: String,
-    attachments: Seq[MessageAttachment])
-
-  implicit val attachmentFieldJsonFormat: Format[AttachmentField] = Json.format[AttachmentField]
-  implicit val messageAttachmentJsonFormat: Format[MessageAttachment] = Json.format[MessageAttachment]
-  implicit val messageJsonFormat: Format[Message] = Json.format[Message]
-
-}
-
-class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] with JsonBodyReadables with serverless.aws.JsonProtocol {
+class ProcessNewmanNotification
+  extends LambdaHandler[Event[PostmanCollectionModels.PostmanCollectionRunResult], Seq[Message]] with JsonBodyReadables {
   override implicit val executionContext: ExecutionContext = Client.executionContext
 
-  import SlackModels._
+  import org.hatdex.slack.SlackModels._
+  val snsClient: SNSClient = new SNSClient(Client.awsRegion, Client.snsTopic)
+
   /*
    *
    * Example Slack message structure:
@@ -157,13 +72,8 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] wit
      },
    */
 
-  override protected def handle(result: JsValue, context: Context): Try[Seq[Message]] = {
-    logger.info(s"Handling request ${context.getAwsRequestId} with content ${result}")
-    val event = result.as[Event[PostmanCollectionModels.PostmanCollectionRunResult]]
-
-    val snsClient = new SNSClient(Client.awsRegion, "")
-
-    val published = event.records flatMap { record =>
+  override protected def handle(event: Event[PostmanCollectionModels.PostmanCollectionRunResult], context: Context): Try[Seq[Message]] = {
+    val published = event.Records flatMap { record =>
       record.Sns map { sns =>
         val notification = buildSlackNotification(sns.Message)
         publishMessage(snsClient, notification)
@@ -172,7 +82,7 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] wit
 
     published.foldLeft(Try(Seq[Message]()))({
       case (Success(s), Success(m)) => Success(s :+ m)
-      case (Success(s), Failure(e)) => Failure(e)
+      case (Success(_), Failure(e)) => Failure(e)
       case (Failure(e), _) => Failure(e)
     })
   }
@@ -180,15 +90,14 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] wit
   def buildSlackNotification(runResult: PostmanCollectionModels.PostmanCollectionRunResult): Message = {
     val stats = runResult.run.stats
     Message(
-      s"""
-         | Collection <https://documenter.getpostman.com/collection/view/${runResult.collection.info.id}|${runResult.collection.info.name}>
-         | with ${stats.requests.total} requests and ${stats.tests.total} tests ran successfully""".stripMargin,
+      s"""Collection <https://documenter.getpostman.com/collection/view/${runResult.collection.info.id}|${runResult.collection.info.name}>
+         |with ${stats.requests.total} requests and ${stats.tests.total} tests ran successfully""".stripMargin.replaceAll("\n", " "),
       Seq(MessageAttachment(
         "36a64f",
         Seq(
           AttachmentField(Some("Status"), Some("Success"), short = true),
           AttachmentField(Some("Tests Passed"), Some(s"${stats.tests.total - stats.tests.failed - stats.tests.pending} of ${stats.tests.total}"), short = true),
-          AttachmentField(Some("Total Response Time"), Some(s"${ChronoUnit.MILLIS.between(runResult.run.timings.completed, runResult.run.timings.started)} ms"), short = true),
+          AttachmentField(Some("Total Response Time"), Some(s"${ChronoUnit.MILLIS.between(runResult.run.timings.started, runResult.run.timings.completed)} ms"), short = true),
           AttachmentField(Some("Total Requests"), Some(s"${stats.requests.total}"), short = true),
           AttachmentField(Some("Errors"), Some(s"${runResult.run.failures.length}"), short = true)
         ),
@@ -204,48 +113,23 @@ class ProcessNewmanNotification extends LambdaHandler[JsValue, Seq[Message]] wit
   }
 }
 
-class SNSClient(region: String, topicArn: String) {
-  def publishSns(message: String): String = {
-    val snsClient = AmazonSNSClientBuilder.standard()
-      .withRegion(region)
-      .build()
 
 
-    import com.amazonaws.services.sns.model.PublishRequest
-    val publishRequest = new PublishRequest(topicArn, message)
-
-    val publishResult = snsClient.publish(publishRequest)
-
-    publishResult.getMessageId
-  }
-
-  private def attribute(attributeName: String, attributeValue: JsValue): (String, MessageAttributeValue) = {
-    val messageAttributeValue = new MessageAttributeValue()
-      .withDataType("String")
-      .withStringValue(attributeValue.toString)
-    (attributeName, messageAttributeValue)
-  }
-
-  private def attribute(attributeName: String, attributeValue: String): (String, MessageAttributeValue) = {
-    attribute(attributeName, Json.toJson(attributeValue))
-  }
-}
-
-class GetStatusHandler extends LambdaProxyHandlerAsync[AnyContent, JsValue] with JsonBodyReadables {
-  override implicit val executionContext: ExecutionContext = Client.executionContext
-
-  override protected def handle(context: Context): Future[JsValue] = {
-    logger.info(s"Handling request ${context.getAwsRequestId}")
-    Client.wsClient.url("https://api.getpostman.com/monitors/110376-1e7f097f-462c-40d0-bc16-5f5acc939cb2")
-      .withHttpHeaders("X-Api-Key" -> Client.postmanApiKey)
-      .get()
-      .map { response =>
-        logger.info(s"Response to request ${context.getAwsRequestId}")
-        response.body[JsValue]
-      }
-  }
-
-}
+//class GetStatusHandler extends LambdaProxyHandlerAsync[AnyContent, JsValue] with JsonBodyReadables {
+//  override implicit val executionContext: ExecutionContext = Client.executionContext
+//
+//  override protected def handle(context: Context): Future[JsValue] = {
+//    logger.info(s"Handling request ${context.getAwsRequestId}")
+//    Client.wsClient.url("https://api.getpostman.com/monitors/110376-1e7f097f-462c-40d0-bc16-5f5acc939cb2")
+//      .withHttpHeaders("X-Api-Key" -> Client.postmanApiKey)
+//      .get()
+//      .map { response =>
+//        logger.info(s"Response to request ${context.getAwsRequestId}")
+//        response.body[JsValue]
+//      }
+//  }
+//
+//}
 
 object Client {
   val logger: Logger = LoggerFactory.getLogger(this.getClass)
@@ -255,8 +139,7 @@ object Client {
   // needed for the future flatMap/onComplete in the end
   implicit val executionContext: ExecutionContext = system.dispatcher
   val wsClient = StandaloneAhcWSClient()
-  val postmanApiKey: String = sys.env.getOrElse("POSTMAN_API_KEY", "")
-  val awsRegion: String = sys.env.getOrElse("AWS_DEFAULT_REGION", "eu-west-1")
-  val snsTopic: String = sys.env("SNS_TOPIC")
-  logger.info(s"Running with POSTMAN API Key $postmanApiKey")
+  lazy val awsRegion: String = sys.env.getOrElse("AWS_DEFAULT_REGION", "eu-west-1")
+  lazy val snsTopic: String = sys.env("SNS_TOPIC")
+  logger.info(s"Initialised with SNS_TOPIC $snsTopic")
 }

@@ -25,12 +25,8 @@ provider:
       Action:
         - SNS:Publish
       Resource:
-        Fn::Join:
-          - ":"
-          - - "arn:aws:sns"
-            - Ref: "AWS::Region"
-            - Ref: "AWS::AccountId"
-            - "NewmanCollectionSNSTopic2"
+        - Ref: "NewmanCollectionSNSTopic2"
+        - Ref: "SlackNotificationsTopic"
 
 package:
   individually: true

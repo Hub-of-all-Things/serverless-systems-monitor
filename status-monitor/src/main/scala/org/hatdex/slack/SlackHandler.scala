@@ -3,21 +3,33 @@ package org.hatdex.slack
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import com.amazonaws.services.lambda.runtime.Context
-import org.hatdex.postman.SlackModels
-import org.hatdex.serverless.aws.{AnyContent, LambdaHandlerAsync}
+import SlackModels.messageJsonFormat
+import org.hatdex.serverless
+import org.hatdex.serverless.aws.EventJsonProtocol.eventReads
+import org.hatdex.serverless.aws.{Event, LambdaHandlerAsync}
 import org.slf4j.{Logger, LoggerFactory}
-import play.api.libs.json.{JsValue, Json}
-import play.api.libs.ws.{DefaultBodyWritables, JsonBodyReadables}
+import play.api.libs.json.Json
 import play.api.libs.ws.ahc.StandaloneAhcWSClient
+import play.api.libs.ws.{DefaultBodyWritables, JsonBodyReadables}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class PostMessageHandler extends LambdaHandlerAsync[SlackModels.Message, AnyContent] with JsonBodyReadables with DefaultBodyWritables {
+class PostMessageHandler extends LambdaHandlerAsync[Event[SlackModels.Message], Seq[SlackModels.Message]] with JsonBodyReadables with DefaultBodyWritables {
   override implicit val executionContext: ExecutionContext = Client.executionContext
   import SlackModels._
 
-  override protected def handle(message: Message, context: Context): Future[AnyContent] = {
-    logger.info(s"Handling request $message to post to slack")
+  override protected def handle(event: Event[SlackModels.Message], context: Context): Future[Seq[SlackModels.Message]] = {
+    logger.info(s"Handling request $event to post to slack")
+    val published = event.Records flatMap { record =>
+      record.Sns map { sns =>
+        postMessage(sns.Message)
+      }
+    }
+
+    Future.sequence(published)
+  }
+
+  def postMessage(message: SlackModels.Message): Future[Message] = {
     Client.wsClient.url("https://slack.com/api/chat.postMessage")
       .post(Map[String, Seq[String]](
         "token" -> Seq(Client.slackApiKey),
@@ -25,10 +37,7 @@ class PostMessageHandler extends LambdaHandlerAsync[SlackModels.Message, AnyCont
         "text" -> Seq(message.text),
         "attachments"-> Seq(Json.toJson(message.attachments).toString)
       ))
-      .map { response =>
-        logger.info(s"Response to request ${context.getAwsRequestId}: ${response.body[JsValue]}")
-        ""
-      }
+      .map(_ => message)
   }
 }
 
