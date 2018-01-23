@@ -4,7 +4,6 @@ import java.io.ByteArrayOutputStream
 
 import com.amazonaws.services.lambda.runtime.Context
 import com.amazonaws.util.StringInputStream
-import SlackModels
 import org.slf4j.{Logger, LoggerFactory}
 import org.specs2.concurrent.ExecutionEnv
 import org.specs2.mock.Mockito

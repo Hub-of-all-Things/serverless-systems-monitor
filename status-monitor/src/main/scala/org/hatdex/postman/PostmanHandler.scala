@@ -89,15 +89,17 @@ class ProcessNewmanNotification
 
   def buildSlackNotification(runResult: PostmanCollectionModels.PostmanCollectionRunResult): Message = {
     val stats = runResult.run.stats
+    val errored: Boolean = runResult.run.error.isDefined || runResult.run.failures.nonEmpty
     Message(
-      s"""Collection <https://documenter.getpostman.com/collection/view/${runResult.collection.info.id}|${runResult.collection.info.name}>
-         |with ${stats.requests.total} requests and ${stats.tests.total} tests ran successfully""".stripMargin.replaceAll("\n", " "),
+      s"""Collection ${runResult.collection.info.name}
+         |with ${stats.requests.total} requests and ${stats.tests.total} tests
+         |${if (errored) "failed" else { "ran successfully"}}""".stripMargin.replaceAll("\n", " "),
       Seq(MessageAttachment(
-        "36a64f",
+        if (errored) { "ed4b48" } else { "36a64f" },
         Seq(
-          AttachmentField(Some("Status"), Some("Success"), short = true),
+          AttachmentField(Some("Status"), if (errored) { Some("Failure") } else { Some("Success") }, short = true),
           AttachmentField(Some("Tests Passed"), Some(s"${stats.tests.total - stats.tests.failed - stats.tests.pending} of ${stats.tests.total}"), short = true),
-          AttachmentField(Some("Total Response Time"), Some(s"${ChronoUnit.MILLIS.between(runResult.run.timings.started, runResult.run.timings.completed)} ms"), short = true),
+          AttachmentField(Some("Total Response Time"), runResult.run.timings.completed.map(completed => s"${ChronoUnit.MILLIS.between(runResult.run.timings.started, completed)} ms"), short = true),
           AttachmentField(Some("Total Requests"), Some(s"${stats.requests.total}"), short = true),
           AttachmentField(Some("Errors"), Some(s"${runResult.run.failures.length}"), short = true)
         ),
@@ -140,6 +142,6 @@ object Client {
   implicit val executionContext: ExecutionContext = system.dispatcher
   val wsClient = StandaloneAhcWSClient()
   lazy val awsRegion: String = sys.env.getOrElse("AWS_DEFAULT_REGION", "eu-west-1")
-  lazy val snsTopic: String = sys.env("SNS_TOPIC")
+  lazy val snsTopic: String = sys.env.getOrElse("SNS_TOPIC", "UNDEFINED")
   logger.info(s"Initialised with SNS_TOPIC $snsTopic")
 }

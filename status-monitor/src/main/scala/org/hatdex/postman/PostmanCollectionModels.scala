@@ -42,7 +42,7 @@ object PostmanCollectionModels {
   case class RunTimings(
     responseAverage: Double,
     started: ZonedDateTime,
-    completed: ZonedDateTime)
+    completed: Option[ZonedDateTime])
 
   case class RunTransfers(
     responseTotal: Long)
